@@ -81,7 +81,7 @@ DATABASES = {
         "NAME": "pyas2db",
         "USER": "postgres",
         "PASSWORD": "postgres",
-        "HOST": "pyas2-pyas2.itzroks-06000206uu-86xvsj-1615bdf0ff9ba5518cb8d7760c84e878-0000.us-south.containers.appdomain.cloud",
+        "HOST": "172.21.217.163",
         "PORT": "5432",
     }
 }
