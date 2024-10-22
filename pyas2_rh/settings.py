@@ -79,9 +79,9 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "pyas2db",
-        "USER": "pyas2dbuser",
-        "PASSWORD": "pyas2dbuser",
-        "HOST": "localhost",
+        "USER": "postgres",
+        "PASSWORD": "postgres",
+        "HOST": "pyas2-pyas2.itzroks-06000206uu-86xvsj-1615bdf0ff9ba5518cb8d7760c84e878-0000.us-south.containers.appdomain.cloud",
         "PORT": "5432",
     }
 }
