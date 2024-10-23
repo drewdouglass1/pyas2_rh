@@ -81,7 +81,7 @@ DATABASES = {
         "NAME": "pyas2db",
         "USER": "pyas2dbuser",
         "PASSWORD": "pyas2dbuser",
-        "HOST": "localhost",
+        "HOST": "172.21.217.163",
         "PORT": "5432",
     }
 }
