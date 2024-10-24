@@ -14,7 +14,6 @@ WORKDIR /apps
 COPY ./src /apps/
 
 ADD entrypoint.sh /apps/
-RUN chmod +x /apps/entrypoint.sh
 
 #Prevents Python from writing .pyc files to disk, which can save space and reduce I/O operations.
 ENV PYTHONDONTWRITEBYTECODE=1
