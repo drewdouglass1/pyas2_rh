@@ -8,8 +8,7 @@ RUN set -ex \
     && pip install --upgrade pip \
     && pip install --no-cache-dir -r /apps/requirements.txt \
     && apk add --virtual rundeps openssl-dev gcc postgresql-dev libffi-dev musl-dev \
-    && apk del .build-deps \
-    && mkdir -p /apps/staticfiles
+    && apk del .build-deps
 
 WORKDIR /apps
 COPY . /apps/
