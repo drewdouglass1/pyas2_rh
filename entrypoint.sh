@@ -14,8 +14,8 @@ fi
 #python manage.py flush --no-input
 python pyas2_rh/manage.py collectstatic --no-input
 python pyas2_rh/manage.py migrate
-python pyas2_rh/manage.py runserver
-#gunicorn pyas2_rh.pyas2_rh.wsgi:application --bind 0.0.0.0:8000
+#python pyas2_rh/manage.py runserver
+gunicorn pyas2_rh.wsgi:application --bind 0.0.0.0:8000
 
 
 exec "$@"
