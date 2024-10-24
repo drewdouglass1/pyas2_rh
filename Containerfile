@@ -13,6 +13,9 @@ RUN set -ex \
 WORKDIR /apps
 COPY ./src /apps/
 
+ADD entrypoint.sh /apps/
+RUN chmod +x /apps/entrypoint.sh
+
 #Prevents Python from writing .pyc files to disk, which can save space and reduce I/O operations.
 ENV PYTHONDONTWRITEBYTECODE=1
 
@@ -20,7 +23,8 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 RUN chown -R 1001:0 /apps/ \
-    && chmod -R g=u /apps
+    && chmod -R g=u /apps \
+    && chmod +x /apps/entrypoint.sh
 USER 1001
 ENTRYPOINT ["/bin/sh", "/apps/entrypoint.sh"]
 
