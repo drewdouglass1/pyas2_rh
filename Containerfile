@@ -9,7 +9,7 @@ RUN set -ex \
     && pip install --no-cache-dir -r /apps/requirements.txt \
     && apk add --virtual rundeps openssl-dev gcc postgresql-dev libffi-dev musl-dev \
     && apk del .build-deps \
-    && mmkdir -p /apps/staticfiles
+    && mkdir -p /apps/staticfiles
 
 RUN chgrp -R 0 /apps/staticfiles && chmod -R g=u /apps/staticfiles
     
