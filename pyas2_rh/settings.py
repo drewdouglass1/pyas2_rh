@@ -81,7 +81,8 @@ DATABASES = {
         "NAME": "pyas2db",
         "USER": "pyas2dbuser",
         "PASSWORD": "pyas2dbuser",
-        "HOST": "172.21.217.163",
+#        "HOST": "172.21.217.163",
+        "HOST": "pyas2postgres-primary.postgres.svc",
         "PORT": "5432",
     }
 }
