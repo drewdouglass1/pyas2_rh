@@ -80,7 +80,7 @@ DATABASES = {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "pyas2db",
         "USER": "pyas2dbuser",
-        "PASSWORD": "pyas2dbuser",
+        "PASSWORD": "abzM:3/oVsA;vYosp@q6LQWH",
 #        "HOST": "172.21.217.163",
         "HOST": "pyas2postgres-primary.postgres.svc",
         "PORT": "5432",
