@@ -23,7 +23,9 @@ ENV PYTHONUNBUFFERED=1
 
 RUN chown -R 1001:0 /apps/ \
     && chmod -R g=u /apps \
-    && chmod +x /apps/entrypoint.sh
+    && chmod +x /apps/entrypoint.sh \
+    && chmod 777 /usr/local/lib/python3.11/site-packages/pyas2/migrations
+    
 USER 1001
 ENTRYPOINT ["/bin/sh", "/apps/entrypoint.sh"]
 
