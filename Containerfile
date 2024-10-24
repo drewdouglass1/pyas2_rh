@@ -20,10 +20,9 @@ ENV PYTHONDONTWRITEBYTECODE=1
 #Ensures that the Python output is sent straight to the terminal (or log) without being buffered, which is useful for debugging and real-time logging
 ENV PYTHONUNBUFFERED=1
 
-USER 1001
 RUN chown -R 1001:0 /apps/ \
     && chmod -R g=u /apps
-
+USER 1001
 ENTRYPOINT ["/bin/sh", "/apps/entrypoint.sh"]
 
 #CMD ["/usr/local/bin/python", "/apps/manage.py", "runserver", "0.0.0.0:8000"]
