@@ -11,19 +11,18 @@ RUN set -ex \
     && apk del .build-deps \
     && mkdir -p /apps/staticfiles
 
-RUN chgrp -R 0 /apps/staticfiles && chmod -R g=u /apps/staticfiles
-    
 WORKDIR /apps
 COPY . /apps/
-
-ADD entrypoint.sh /apps/
-RUN chmod +x /apps/entrypoint.sh
 
 #Prevents Python from writing .pyc files to disk, which can save space and reduce I/O operations.
 ENV PYTHONDONTWRITEBYTECODE=1
 
 #Ensures that the Python output is sent straight to the terminal (or log) without being buffered, which is useful for debugging and real-time logging
 ENV PYTHONUNBUFFERED=1
+
+USER 1001
+RUN chown -R 1001:0 /apps/ \
+    && chmod -R g=u /apps
 
 ENTRYPOINT ["/bin/sh", "/apps/entrypoint.sh"]
 
