@@ -11,7 +11,7 @@ RUN set -ex \
     && apk del .build-deps
 
 WORKDIR /apps
-COPY ./src /apps/
+COPY ./pyas2_rh /apps/
 
 ADD entrypoint.sh /apps/
 
