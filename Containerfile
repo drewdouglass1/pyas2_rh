@@ -11,7 +11,7 @@ RUN set -ex \
     && apk del .build-deps
 
 WORKDIR /apps
-COPY . /apps/
+COPY ./src /apps/
 
 #Prevents Python from writing .pyc files to disk, which can save space and reduce I/O operations.
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -23,8 +23,5 @@ RUN chown -R 1001:0 /apps/ \
     && chmod -R g=u /apps
 USER 1001
 ENTRYPOINT ["/bin/sh", "/apps/entrypoint.sh"]
-
-#CMD ["/usr/local/bin/python", "/apps/manage.py", "runserver", "0.0.0.0:8000"]
-#CMD ["gunicorn", "pyas2_ocp.wsgi:application", "--bind", "0.0.0.0:8000"]
 
 EXPOSE 8000
