@@ -48,6 +48,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 
 ROOT_URLCONF = "pyas2_rh.urls"
@@ -123,7 +124,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'#Location of static files
 
-STATIC_ROOT  = '/apps/staticfiles'
+STATIC_ROOT  = '/apps/static'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

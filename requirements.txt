@@ -17,3 +17,4 @@ sqlparse==0.5.1
 urllib3==2.2.3
 gunicorn==23.0.0
 packaging==24.1
+whitenoise==6.8.2
