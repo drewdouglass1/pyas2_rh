@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    alpha.image.policy.openshift.io/resolve-names: '*'
+    app.openshift.io/route-disabled: "false"
+    app.openshift.io/vcs-ref: ""
+    app.openshift.io/vcs-uri: https://github.com/drewdouglass1/pyas2_rh.git
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"pyas-2:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"pyas-2\")].image","pause":"false"}]'
+    openshift.io/generated-by: OpenShiftWebConsole
+  labels:
+    app: pyas-2
+    app.kubernetes.io/component: pyas-2
+    app.kubernetes.io/instance: pyas-2
+    app.kubernetes.io/name: pyas-2
+    app.kubernetes.io/part-of: pyas-2
+  name: pyas-2
+spec:
+  progressDeadlineSeconds: 600
+  replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: pyas-2
+  strategy:
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: pyas-2
+        deployment: pyas-2
+    spec:
+      containers:
+      - image: image-registry.openshift-image-registry.svc:5000/p2/pyas-2@sha256:5af42a77502faf56f6918d059cf51b260d6619d82b9a632ff9f5b0d21b482867
+        imagePullPolicy: Always
+        name: pyas-2
+        resources: {}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30

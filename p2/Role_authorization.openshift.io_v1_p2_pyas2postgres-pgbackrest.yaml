@@ -1,0 +1,29 @@
+apiVersion: authorization.openshift.io/v1
+kind: Role
+metadata:
+  labels:
+    postgres-operator.crunchydata.com/cluster: pyas2postgres
+    postgres-operator.crunchydata.com/pgbackrest: ""
+  name: pyas2postgres-pgbackrest
+  ownerReferences:
+  - apiVersion: postgres-operator.crunchydata.com/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PostgresCluster
+    name: pyas2postgres
+    uid: 61cd6c40-24f8-4020-8bc3-df9efa28a6b8
+rules:
+- apiGroups:
+  - ""
+  attributeRestrictions: null
+  resources:
+  - pods
+  verbs:
+  - list
+- apiGroups:
+  - ""
+  attributeRestrictions: null
+  resources:
+  - pods/exec
+  verbs:
+  - create

@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    app.openshift.io/vcs-ref: ""
+    app.openshift.io/vcs-uri: https://github.com/drewdouglass1/pyas2_rh.git
+    openshift.io/generated-by: OpenShiftWebConsole
+  labels:
+    app: pyas-2
+    app.kubernetes.io/component: pyas-2
+    app.kubernetes.io/instance: pyas-2
+    app.kubernetes.io/name: pyas-2
+    app.kubernetes.io/part-of: pyas-2
+  name: pyas-2
+spec:
+  internalTrafficPolicy: Cluster
+  ipFamilies:
+  - IPv4
+  ipFamilyPolicy: SingleStack
+  ports:
+  - name: 8000-tcp
+    port: 8000
+    protocol: TCP
+    targetPort: 8000
+  selector:
+    app: pyas-2
+    deployment: pyas-2
+  sessionAffinity: None
+  type: ClusterIP

@@ -1,0 +1,618 @@
+apiVersion: apps/v1
+data:
+  spec:
+    template:
+      $patch: replace
+      metadata:
+        creationTimestamp: null
+        labels:
+          postgres-operator.crunchydata.com/cluster: pyas2postgres
+          postgres-operator.crunchydata.com/data: postgres
+          postgres-operator.crunchydata.com/instance: pyas2postgres-instance1-n4gg
+          postgres-operator.crunchydata.com/instance-set: instance1
+          postgres-operator.crunchydata.com/patroni: pyas2postgres-ha
+      spec:
+        containers:
+        - command:
+          - patroni
+          - /etc/patroni
+          env:
+          - name: PGDATA
+            value: /pgdata/pg16
+          - name: PGHOST
+            value: /tmp/postgres
+          - name: PGPORT
+            value: "5432"
+          - name: KRB5_CONFIG
+            value: /etc/postgres/krb5.conf
+          - name: KRB5RCACHEDIR
+            value: /tmp
+          - name: LDAPTLS_CACERT
+            value: /etc/postgres/ldap/ca.crt
+          - name: PATRONI_NAME
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.name
+          - name: PATRONI_KUBERNETES_POD_IP
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: status.podIP
+          - name: PATRONI_KUBERNETES_PORTS
+            value: |
+              - name: postgres
+                port: 5432
+                protocol: TCP
+          - name: PATRONI_POSTGRESQL_CONNECT_ADDRESS
+            value: $(PATRONI_NAME).pyas2postgres-pods:5432
+          - name: PATRONI_POSTGRESQL_LISTEN
+            value: '*:5432'
+          - name: PATRONI_POSTGRESQL_CONFIG_DIR
+            value: /pgdata/pg16
+          - name: PATRONI_POSTGRESQL_DATA_DIR
+            value: /pgdata/pg16
+          - name: PATRONI_RESTAPI_CONNECT_ADDRESS
+            value: $(PATRONI_NAME).pyas2postgres-pods:8008
+          - name: PATRONI_RESTAPI_LISTEN
+            value: '*:8008'
+          - name: PATRONICTL_CONFIG_FILE
+            value: /etc/patroni
+          - name: LD_PRELOAD
+            value: /usr/lib64/libnss_wrapper.so
+          - name: NSS_WRAPPER_PASSWD
+            value: /tmp/nss_wrapper/postgres/passwd
+          - name: NSS_WRAPPER_GROUP
+            value: /tmp/nss_wrapper/postgres/group
+          image: registry.connect.redhat.com/crunchydata/crunchy-postgres@sha256:282c4c9c3b5c3d67c960585ec6cb947d3a6af981cb48a0083ebebe61cc5b8cc4
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /liveness
+              port: 8008
+              scheme: HTTPS
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          name: database
+          ports:
+          - containerPort: 5432
+            name: postgres
+            protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /readiness
+              port: 8008
+              scheme: HTTPS
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /pgconf/tls
+            name: cert-volume
+            readOnly: true
+          - mountPath: /pgdata
+            name: postgres-data
+          - mountPath: /etc/database-containerinfo
+            name: database-containerinfo
+            readOnly: true
+          - mountPath: /etc/pgbackrest/conf.d
+            name: pgbackrest-config
+            readOnly: true
+          - mountPath: /etc/patroni
+            name: patroni-config
+            readOnly: true
+          - mountPath: /tmp
+            name: tmp
+          - mountPath: /dev/shm
+            name: dshm
+        - command:
+          - bash
+          - -ceu
+          - --
+          - |-
+            monitor() {
+            # Parameters for curl when managing autogrow annotation.
+            APISERVER="https://kubernetes.default.svc"
+            SERVICEACCOUNT="/var/run/secrets/kubernetes.io/serviceaccount"
+            NAMESPACE=$(cat ${SERVICEACCOUNT}/namespace)
+            TOKEN=$(cat ${SERVICEACCOUNT}/token)
+            CACERT=${SERVICEACCOUNT}/ca.crt
+
+            declare -r directory="/pgconf/tls"
+            exec {fd}<> <(:||:)
+            while read -r -t 5 -u "${fd}" ||:; do
+              # Manage replication certificate.
+              if [[ "${directory}" -nt "/proc/self/fd/${fd}" ]] &&
+                install -D --mode=0600 -t "/tmp/replication" "${directory}"/{replication/tls.crt,replication/tls.key,replication/ca.crt} &&
+                pkill -HUP --exact --parent=1 postgres
+              then
+                exec {fd}>&- && exec {fd}<> <(:||:)
+                stat --format='Loaded certificates dated %y' "${directory}"
+              fi
+
+              # Manage autogrow annotation.
+              # Return size in Mebibytes.
+              size=$(df --human-readable --block-size=M /pgdata | awk 'FNR == 2 {print $2}')
+              use=$(df --human-readable /pgdata | awk 'FNR == 2 {print $5}')
+              sizeInt="${size//M/}"
+              # Use the sed punctuation class, because the shell will not accept the percent sign in an expansion.
+              useInt=$(echo $use | sed 's/[[:punct:]]//g')
+              triggerExpansion="$((useInt > 75))"
+              if [ $triggerExpansion -eq 1 ]; then
+                newSize="$(((sizeInt / 2)+sizeInt))"
+                newSizeMi="${newSize}Mi"
+                d='[{"op": "add", "path": "/metadata/annotations/suggested-pgdata-pvc-size", "value": "'"$newSizeMi"'"}]'
+                curl --cacert ${CACERT} --header "Authorization: Bearer ${TOKEN}" -XPATCH "${APISERVER}/api/v1/namespaces/${NAMESPACE}/pods/${HOSTNAME}?fieldManager=kubectl-annotate" -H "Content-Type: application/json-patch+json" --data "$d"
+              fi
+            done
+            }; export -f monitor; exec -a "$0" bash -ceu monitor
+          - replication-cert-copy
+          image: registry.connect.redhat.com/crunchydata/crunchy-postgres@sha256:282c4c9c3b5c3d67c960585ec6cb947d3a6af981cb48a0083ebebe61cc5b8cc4
+          imagePullPolicy: IfNotPresent
+          name: replication-cert-copy
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /pgconf/tls
+            name: cert-volume
+            readOnly: true
+          - mountPath: /pgdata
+            name: postgres-data
+          - mountPath: /tmp
+            name: tmp
+        - command:
+          - pgbackrest
+          - server
+          env:
+          - name: LD_PRELOAD
+            value: /usr/lib64/libnss_wrapper.so
+          - name: NSS_WRAPPER_PASSWD
+            value: /tmp/nss_wrapper/postgres/passwd
+          - name: NSS_WRAPPER_GROUP
+            value: /tmp/nss_wrapper/postgres/group
+          image: registry.connect.redhat.com/crunchydata/crunchy-pgbackrest@sha256:5614fa90c56aac4cd7a9710b7efb24b22e356facbc2e7a52bbeccf5185723199
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            exec:
+              command:
+              - pgbackrest
+              - server-ping
+            failureThreshold: 3
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 1
+          name: pgbackrest
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /etc/pgbackrest/server
+            name: pgbackrest-server
+            readOnly: true
+          - mountPath: /pgdata
+            name: postgres-data
+          - mountPath: /etc/pgbackrest/conf.d
+            name: pgbackrest-config
+            readOnly: true
+          - mountPath: /tmp
+            name: tmp
+        - command:
+          - bash
+          - -ceu
+          - --
+          - |-
+            monitor() {
+            exec {fd}<> <(:||:)
+            until read -r -t 5 -u "${fd}"; do
+              if
+                [[ "${filename}" -nt "/proc/self/fd/${fd}" ]] &&
+                pkill -HUP --exact --parent=0 pgbackrest
+              then
+                exec {fd}>&- && exec {fd}<> <(:||:)
+                stat --dereference --format='Loaded configuration dated %y' "${filename}"
+              elif
+                { [[ "${directory}" -nt "/proc/self/fd/${fd}" ]] ||
+                  [[ "${authority}" -nt "/proc/self/fd/${fd}" ]]
+                } &&
+                pkill -HUP --exact --parent=0 pgbackrest
+              then
+                exec {fd}>&- && exec {fd}<> <(:||:)
+                stat --format='Loaded certificates dated %y' "${directory}"
+              fi
+            done
+            }; export directory="$1" authority="$2" filename="$3"; export -f monitor; exec -a "$0" bash -ceu monitor
+          - pgbackrest-config
+          - /etc/pgbackrest/server
+          - /etc/pgbackrest/conf.d/~postgres-operator/tls-ca.crt
+          - /etc/pgbackrest/conf.d/~postgres-operator_server.conf
+          image: registry.connect.redhat.com/crunchydata/crunchy-pgbackrest@sha256:5614fa90c56aac4cd7a9710b7efb24b22e356facbc2e7a52bbeccf5185723199
+          imagePullPolicy: IfNotPresent
+          name: pgbackrest-config
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /etc/pgbackrest/server
+            name: pgbackrest-server
+            readOnly: true
+          - mountPath: /etc/pgbackrest/conf.d
+            name: pgbackrest-config
+            readOnly: true
+          - mountPath: /tmp
+            name: tmp
+        dnsPolicy: ClusterFirst
+        enableServiceLinks: false
+        initContainers:
+        - command:
+          - bash
+          - -ceu
+          - --
+          - |-
+            declare -r expected_major_version="$1" pgwal_directory="$2" pgbrLog_directory="$3"
+            permissions() { while [[ -n "$1" ]]; do set "${1%/*}" "$@"; done; shift; stat -Lc '%A %4u %4g %n' "$@"; }
+            halt() { local rc=$?; >&2 echo "$@"; exit "${rc/#0/1}"; }
+            results() { printf '::postgres-operator: %s::%s\n' "$@"; }
+            recreate() (
+              local tmp; tmp=$(mktemp -d -p "${1%/*}"); GLOBIGNORE='.:..'; set -x
+              chmod "$2" "${tmp}"; mv "$1"/* "${tmp}"; rmdir "$1"; mv "${tmp}" "$1"
+            )
+            safelink() (
+              local desired="$1" name="$2" current
+              current=$(realpath "${name}")
+              if [[ "${current}" == "${desired}" ]]; then return; fi
+              set -x; mv --no-target-directory "${current}" "${desired}"
+              ln --no-dereference --force --symbolic "${desired}" "${name}"
+            )
+            echo Initializing ...
+            results 'uid' "$(id -u ||:)" 'gid' "$(id -G ||:)"
+            if [[ "${pgwal_directory}" == *"pgwal/"* ]] && [[ ! -d "/pgwal/pgbackrest-spool" ]];then rm -rf "/pgdata/pgbackrest-spool" && mkdir -p "/pgwal/pgbackrest-spool" && ln --force --symbolic "/pgwal/pgbackrest-spool" "/pgdata/pgbackrest-spool";fi
+            if [[ ! -e "/pgdata/pgbackrest-spool" ]];then rm -rf /pgdata/pgbackrest-spool;fi
+            results 'postgres path' "$(command -v postgres ||:)"
+            results 'postgres version' "${postgres_version:=$(postgres --version ||:)}"
+            [[ "${postgres_version}" =~ ") ${expected_major_version}"($|[^0-9]) ]] ||
+            halt Expected PostgreSQL version "${expected_major_version}"
+            results 'config directory' "${PGDATA:?}"
+            postgres_data_directory=$([[ -d "${PGDATA}" ]] && postgres -C data_directory || echo "${PGDATA}")
+            results 'data directory' "${postgres_data_directory}"
+            [[ "${postgres_data_directory}" == "${PGDATA}" ]] ||
+            halt Expected matching config and data directories
+            bootstrap_dir="${postgres_data_directory}_bootstrap"
+            [[ -d "${bootstrap_dir}" ]] && results 'bootstrap directory' "${bootstrap_dir}"
+            [[ -d "${bootstrap_dir}" ]] && postgres_data_directory="${bootstrap_dir}"
+            if [[ ! -e "${postgres_data_directory}" || -O "${postgres_data_directory}" ]]; then
+            install --directory --mode=0700 "${postgres_data_directory}"
+            elif [[ -w "${postgres_data_directory}" && -g "${postgres_data_directory}" ]]; then
+            recreate "${postgres_data_directory}" '0700'
+            else (halt Permissions!); fi ||
+            halt "$(permissions "${postgres_data_directory}" ||:)"
+            results 'pgBackRest log directory' "${pgbrLog_directory}"
+            install --directory --mode=0775 "${pgbrLog_directory}" ||
+            halt "$(permissions "${pgbrLog_directory}" ||:)"
+            install -D --mode=0600 -t "/tmp/replication" "/pgconf/tls/replication"/{tls.crt,tls.key,ca.crt}
+
+
+            [[ -f "${postgres_data_directory}/PG_VERSION" ]] || exit 0
+            results 'data version' "${postgres_data_version:=$(< "${postgres_data_directory}/PG_VERSION")}"
+            [[ "${postgres_data_version}" == "${expected_major_version}" ]] ||
+            halt Expected PostgreSQL data version "${expected_major_version}"
+            [[ ! -f "${postgres_data_directory}/postgresql.conf" ]] &&
+            touch "${postgres_data_directory}/postgresql.conf"
+            safelink "${pgwal_directory}" "${postgres_data_directory}/pg_wal"
+            results 'wal directory' "$(realpath "${postgres_data_directory}/pg_wal" ||:)"
+            rm -f "${postgres_data_directory}/recovery.signal"
+          - startup
+          - "16"
+          - /pgdata/pg16_wal
+          - /pgdata/pgbackrest/log
+          env:
+          - name: PGDATA
+            value: /pgdata/pg16
+          - name: PGHOST
+            value: /tmp/postgres
+          - name: PGPORT
+            value: "5432"
+          - name: KRB5_CONFIG
+            value: /etc/postgres/krb5.conf
+          - name: KRB5RCACHEDIR
+            value: /tmp
+          - name: LDAPTLS_CACERT
+            value: /etc/postgres/ldap/ca.crt
+          image: registry.connect.redhat.com/crunchydata/crunchy-postgres@sha256:282c4c9c3b5c3d67c960585ec6cb947d3a6af981cb48a0083ebebe61cc5b8cc4
+          imagePullPolicy: IfNotPresent
+          name: postgres-startup
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /pgconf/tls
+            name: cert-volume
+            readOnly: true
+          - mountPath: /pgdata
+            name: postgres-data
+          - mountPath: /tmp
+            name: tmp
+        - command:
+          - bash
+          - -c
+          - "export NSS_WRAPPER_SUBDIR=postgres CRUNCHY_NSS_USERNAME=postgres CRUNCHY_NSS_USER_DESC=\"postgres\"
+            \n# Define nss_wrapper directory and passwd & group files that will be
+            utilized by nss_wrapper.  The\n# nss_wrapper_env.sh script (which also
+            sets these vars) isn't sourced here since the nss_wrapper\n# has not yet
+            been setup, and we therefore don't yet want the nss_wrapper vars in the
+            environment.\nmkdir -p /tmp/nss_wrapper\nchmod g+rwx /tmp/nss_wrapper\n\nNSS_WRAPPER_DIR=\"/tmp/nss_wrapper/${NSS_WRAPPER_SUBDIR}\"\nNSS_WRAPPER_PASSWD=\"${NSS_WRAPPER_DIR}/passwd\"\nNSS_WRAPPER_GROUP=\"${NSS_WRAPPER_DIR}/group\"\n\n#
+            create the nss_wrapper directory\nmkdir -p \"${NSS_WRAPPER_DIR}\"\n\n#
+            grab the current user ID and group ID\nUSER_ID=$(id -u)\nexport USER_ID\nGROUP_ID=$(id
+            -g)\nexport GROUP_ID\n\n# get copies of the passwd and group files\n[[
+            -f \"${NSS_WRAPPER_PASSWD}\" ]] || cp \"/etc/passwd\" \"${NSS_WRAPPER_PASSWD}\"\n[[
+            -f \"${NSS_WRAPPER_GROUP}\" ]] || cp \"/etc/group\" \"${NSS_WRAPPER_GROUP}\"\n\n#
+            if the username is missing from the passwd file, then add it\nif [[ !
+            $(cat \"${NSS_WRAPPER_PASSWD}\") =~ ${CRUNCHY_NSS_USERNAME}:x:${USER_ID}
+            ]]; then\n    echo \"nss_wrapper: adding user\"\n    passwd_tmp=\"${NSS_WRAPPER_DIR}/passwd_tmp\"\n
+            \   cp \"${NSS_WRAPPER_PASSWD}\" \"${passwd_tmp}\"\n    sed -i \"/${CRUNCHY_NSS_USERNAME}:x:/d\"
+            \"${passwd_tmp}\"\n    # needed for OCP 4.x because crio updates /etc/passwd
+            with an entry for USER_ID\n    sed -i \"/${USER_ID}:x:/d\" \"${passwd_tmp}\"\n
+            \   printf '${CRUNCHY_NSS_USERNAME}:x:${USER_ID}:${GROUP_ID}:${CRUNCHY_NSS_USER_DESC}:${HOME}:/bin/bash\\n'
+            >> \"${passwd_tmp}\"\n    envsubst < \"${passwd_tmp}\" > \"${NSS_WRAPPER_PASSWD}\"\n
+            \   rm \"${passwd_tmp}\"\nelse\n    echo \"nss_wrapper: user exists\"\nfi\n\n#
+            if the username (which will be the same as the group name) is missing
+            from group file, then add it\nif [[ ! $(cat \"${NSS_WRAPPER_GROUP}\")
+            =~ ${CRUNCHY_NSS_USERNAME}:x:${USER_ID} ]]; then\n    echo \"nss_wrapper:
+            adding group\"\n    group_tmp=\"${NSS_WRAPPER_DIR}/group_tmp\"\n    cp
+            \"${NSS_WRAPPER_GROUP}\" \"${group_tmp}\"\n    sed -i \"/${CRUNCHY_NSS_USERNAME}:x:/d\"
+            \"${group_tmp}\"\n    printf '${CRUNCHY_NSS_USERNAME}:x:${USER_ID}:${CRUNCHY_NSS_USERNAME}\\n'
+            >> \"${group_tmp}\"\n    envsubst < \"${group_tmp}\" > \"${NSS_WRAPPER_GROUP}\"\n
+            \   rm \"${group_tmp}\"\nelse\n    echo \"nss_wrapper: group exists\"\nfi\n\n#
+            export the nss_wrapper env vars\n# define nss_wrapper directory and passwd
+            & group files that will be utilized by nss_wrapper\nNSS_WRAPPER_DIR=\"/tmp/nss_wrapper/${NSS_WRAPPER_SUBDIR}\"\nNSS_WRAPPER_PASSWD=\"${NSS_WRAPPER_DIR}/passwd\"\nNSS_WRAPPER_GROUP=\"${NSS_WRAPPER_DIR}/group\"\n\nexport
+            LD_PRELOAD=/usr/lib64/libnss_wrapper.so\nexport NSS_WRAPPER_PASSWD=\"${NSS_WRAPPER_PASSWD}\"\nexport
+            NSS_WRAPPER_GROUP=\"${NSS_WRAPPER_GROUP}\"\n\necho \"nss_wrapper: environment
+            configured\"\n"
+          image: registry.connect.redhat.com/crunchydata/crunchy-postgres@sha256:282c4c9c3b5c3d67c960585ec6cb947d3a6af981cb48a0083ebebe61cc5b8cc4
+          imagePullPolicy: IfNotPresent
+          name: nss-wrapper-init
+          resources: {}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+              - ALL
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /tmp
+            name: tmp
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext:
+          fsGroupChangePolicy: OnRootMismatch
+        serviceAccount: pyas2postgres-instance
+        serviceAccountName: pyas2postgres-instance
+        shareProcessNamespace: true
+        terminationGracePeriodSeconds: 30
+        topologySpreadConstraints:
+        - labelSelector:
+            matchExpressions:
+            - key: postgres-operator.crunchydata.com/data
+              operator: In
+              values:
+              - postgres
+              - pgbackrest
+            matchLabels:
+              postgres-operator.crunchydata.com/cluster: pyas2postgres
+          maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+        - labelSelector:
+            matchExpressions:
+            - key: postgres-operator.crunchydata.com/data
+              operator: In
+              values:
+              - postgres
+              - pgbackrest
+            matchLabels:
+              postgres-operator.crunchydata.com/cluster: pyas2postgres
+          maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+        volumes:
+        - name: cert-volume
+          projected:
+            defaultMode: 384
+            sources:
+            - secret:
+                items:
+                - key: tls.crt
+                  path: tls.crt
+                - key: tls.key
+                  path: tls.key
+                - key: ca.crt
+                  path: ca.crt
+                name: pyas2postgres-cluster-cert
+            - secret:
+                items:
+                - key: tls.crt
+                  path: replication/tls.crt
+                - key: tls.key
+                  path: replication/tls.key
+                - key: ca.crt
+                  path: replication/ca.crt
+                name: pyas2postgres-replication-cert
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: pyas2postgres-instance1-n4gg-pgdata
+        - downwardAPI:
+            defaultMode: 420
+            items:
+            - path: cpu_limit
+              resourceFieldRef:
+                containerName: database
+                divisor: 1m
+                resource: limits.cpu
+            - path: cpu_request
+              resourceFieldRef:
+                containerName: database
+                divisor: 1m
+                resource: requests.cpu
+            - path: mem_limit
+              resourceFieldRef:
+                containerName: database
+                divisor: 1Mi
+                resource: limits.memory
+            - path: mem_request
+              resourceFieldRef:
+                containerName: database
+                divisor: 1Mi
+                resource: requests.memory
+            - fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.labels
+              path: labels
+            - fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.annotations
+              path: annotations
+          name: database-containerinfo
+        - name: pgbackrest-server
+          projected:
+            defaultMode: 420
+            sources:
+            - secret:
+                items:
+                - key: pgbackrest-server.crt
+                  path: server-tls.crt
+                - key: pgbackrest-server.key
+                  mode: 384
+                  path: server-tls.key
+                name: pyas2postgres-instance1-n4gg-certs
+        - name: pgbackrest-config
+          projected:
+            defaultMode: 420
+            sources:
+            - configMap:
+                items:
+                - key: pgbackrest_instance.conf
+                  path: pgbackrest_instance.conf
+                - key: config-hash
+                  path: config-hash
+                - key: pgbackrest-server.conf
+                  path: ~postgres-operator_server.conf
+                name: pyas2postgres-pgbackrest-config
+            - secret:
+                items:
+                - key: pgbackrest.ca-roots
+                  path: ~postgres-operator/tls-ca.crt
+                - key: pgbackrest-client.crt
+                  path: ~postgres-operator/client-tls.crt
+                - key: pgbackrest-client.key
+                  mode: 384
+                  path: ~postgres-operator/client-tls.key
+                name: pyas2postgres-pgbackrest
+        - name: patroni-config
+          projected:
+            defaultMode: 420
+            sources:
+            - configMap:
+                items:
+                - key: patroni.yaml
+                  path: ~postgres-operator_cluster.yaml
+                name: pyas2postgres-config
+            - configMap:
+                items:
+                - key: patroni.yaml
+                  path: ~postgres-operator_instance.yaml
+                name: pyas2postgres-instance1-n4gg-config
+            - secret:
+                items:
+                - key: patroni.ca-roots
+                  path: ~postgres-operator/patroni.ca-roots
+                - key: patroni.crt-combined
+                  path: ~postgres-operator/patroni.crt+key
+                name: pyas2postgres-instance1-n4gg-certs
+        - emptyDir:
+            sizeLimit: 16Mi
+          name: tmp
+        - emptyDir:
+            medium: Memory
+          name: dshm
+kind: ControllerRevision
+metadata:
+  labels:
+    controller.kubernetes.io/hash: 7f9f4594cf
+    postgres-operator.crunchydata.com/cluster: pyas2postgres
+    postgres-operator.crunchydata.com/data: postgres
+    postgres-operator.crunchydata.com/instance: pyas2postgres-instance1-n4gg
+    postgres-operator.crunchydata.com/instance-set: instance1
+    postgres-operator.crunchydata.com/patroni: pyas2postgres-ha
+  name: pyas2postgres-instance1-n4gg-7f9f4594cf
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: StatefulSet
+    name: pyas2postgres-instance1-n4gg
+    uid: 0fe363e6-5f09-4e8d-83fd-d98af4c2343c
+revision: 1

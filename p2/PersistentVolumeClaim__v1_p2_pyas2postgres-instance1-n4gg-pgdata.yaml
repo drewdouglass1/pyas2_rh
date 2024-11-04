@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-provisioner: vpc.block.csi.ibm.io
+    volume.kubernetes.io/storage-provisioner: vpc.block.csi.ibm.io
+  finalizers:
+  - kubernetes.io/pvc-protection
+  labels:
+    postgres-operator.crunchydata.com/cluster: pyas2postgres
+    postgres-operator.crunchydata.com/data: postgres
+    postgres-operator.crunchydata.com/instance: pyas2postgres-instance1-n4gg
+    postgres-operator.crunchydata.com/instance-set: instance1
+    postgres-operator.crunchydata.com/role: pgdata
+  name: pyas2postgres-instance1-n4gg-pgdata
+  ownerReferences:
+  - apiVersion: postgres-operator.crunchydata.com/v1beta1
+    blockOwnerDeletion: true
+    controller: true
+    kind: PostgresCluster
+    name: pyas2postgres
+    uid: 61cd6c40-24f8-4020-8bc3-df9efa28a6b8
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ibmc-vpc-block-10iops-tier
+  volumeMode: Filesystem

@@ -1,0 +1,20 @@
+apiVersion: authorization.openshift.io/v1
+groupNames: null
+kind: RoleBinding
+metadata:
+  name: postgresoperator.v5.7.0
+  ownerReferences:
+  - apiVersion: operators.coreos.com/v2
+    blockOwnerDeletion: false
+    controller: true
+    kind: OperatorCondition
+    name: postgresoperator.v5.7.0
+    uid: 64fe03b7-ab99-4279-be31-978a815c7a95
+roleRef:
+  name: postgresoperator.v5.7.0
+  namespace: p2
+subjects:
+- kind: ServiceAccount
+  name: pgo
+userNames:
+- system:serviceaccount:p2:pgo

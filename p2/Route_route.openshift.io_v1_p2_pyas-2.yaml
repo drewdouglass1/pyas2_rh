@@ -1,0 +1,20 @@
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  annotations:
+    openshift.io/host.generated: "true"
+  labels:
+    app: pyas-2
+    app.kubernetes.io/component: pyas-2
+    app.kubernetes.io/instance: pyas-2
+    app.kubernetes.io/name: pyas-2
+    app.kubernetes.io/part-of: pyas-2
+  name: pyas-2
+spec:
+  port:
+    targetPort: 8000-tcp
+  to:
+    kind: Service
+    name: pyas-2
+    weight: 100
+  wildcardPolicy: None
