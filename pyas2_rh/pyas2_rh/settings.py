@@ -75,16 +75,16 @@ WSGI_APPLICATION = "pyas2_rh.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+# OpenShift Deployment adds secret as env vars
 import os
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": "pyas2db",
-        "USER": "pyas2dbuser",
-        "PASSWORD": "abzM:3/oVsA;vYosp@q6LQWH",
-#        "HOST": "172.21.217.163",
-        "HOST": "pyas2postgres-primary.postgres.svc",
-        "PORT": "5432",
+        "NAME": os.environ.get("dbname"),
+        "USER": os.environ.get("user"),
+        "PASSWORD": os.environ.get("password"),
+        "HOST": os.environ.get("host"),
+        "PORT": os.environ.get("port"),
     }
 }
 
